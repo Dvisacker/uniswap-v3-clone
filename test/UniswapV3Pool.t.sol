@@ -6,7 +6,5 @@ import "forge-std/Test.sol";
 contract UniswapV3PoolTest is Test {
     function setUp() public {}
 
-    function testExample() public {
-        assertTrue(true);
-    }
+    function testExample() public {}
 }

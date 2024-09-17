@@ -54,6 +54,39 @@ def calc_amount_1(liq, p_a, p_b):
         p_a, p_b = p_b,p_a 
     return int(liq * (p_b - p_a) / q96)
 
+def get_updated_price(sqrtp_cur, amount_in, liq):
+    price_diff = (amount_in * q96) // liq
+    return sqrtp_cur + price_diff
+
+
+def get_tick_position(tick):
+    word_pos = tick // 256
+    bit_pos = tick % 256
+    return word_pos, bit_pos
+
+def flip_tick_position(tick_bitmap, tick, tick_spacing):
+    assert tick % tick_spacing == 0
+
+    word_pos, bit_pos = get_tick_position(tick)
+    print(word_pos, bit_pos)
+    mask = 1 << bit_pos
+
+    if word_pos not in tick_bitmap:
+        tick_bitmap[word_pos] = 0
+
+    tick_bitmap[word_pos] ^= mask
+    return tick_bitmap
+
+def example_flip_tick_position():
+    tick_bitmap = {}
+    tick = 85176
+    tick_spacing = 1
+    tick_bitmap = flip_tick_position(tick_bitmap, tick, tick_spacing)
+    for word in tick_bitmap:
+        print(bin(word))
+
+example_flip_tick_position()
+
 def example_liquidity():
     current_price = 5000 # 1 eth = 5000 usdc
     sqrt_current = price_to_sqrtp(current_price)
@@ -63,17 +96,37 @@ def example_liquidity():
     amount_usdc = current_price * amount_eth
 
     # we deposit liquidity between 4545 and 5500
-    sqrt_low = price_to_sqrtp(4545)
-    sqrt_high = price_to_sqrtp(5500)
+    sqrtp_low = price_to_sqrtp(4545)
+    sqrtp_high = price_to_sqrtp(5500)
 
-    liq = liquidity(amount_eth, amount_usdc, sqrt_current, sqrt_low, sqrt_high)
+    liq = liquidity(amount_eth, amount_usdc, sqrt_current, sqrtp_low, sqrtp_high)
     print(liq)
 
     
+def example_get_updated_price():
+    amount_eth = 1 * eth
+    current_price = 5000 # 1 eth = 5000 usdc
+    amount_usdc = current_price * amount_eth
+    sqrtp_cur = price_to_sqrtp(current_price)
+
+    # we deposit liquidity between 4545 and 5500
+    sqrtp_low = price_to_sqrtp(4545)
+    sqrtp_high = price_to_sqrtp(5500)
+
+    liq = liquidity(amount_eth, amount_usdc, sqrtp_cur, sqrtp_low, sqrtp_high)
+
+    amount_eth_in = 10 * eth
+    new_sqrtp = get_updated_price(sqrtp_cur, amount_eth_in, liq)
+    print(new_sqrtp)
+
+    amount_in = calc_amount_0(liq, new_sqrtp, sqrtp_cur)
+    amount_out = calc_amount_1(liq, new_sqrtp, sqrtp_cur)
+    print(amount_in / eth, amount_out / eth)
 
 
-example_liquidity()
+# example_liquidity()
 
+# example_get_updated_price()
 
 
 

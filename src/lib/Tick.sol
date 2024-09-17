@@ -4,10 +4,15 @@ library Tick {
         uint128 liquidity;
     }
 
-    function update(mapping(int24 => Info) storage self, int24 tick, uint128 liquidityDelta) internal {
+    function update(mapping(int24 => Info) storage self, int24 tick, uint128 liquidityDelta)
+        internal
+        returns (bool flipped)
+    {
         Tick.Info storage tickInfo = self[tick];
         uint128 liquidityBefore = tickInfo.liquidity;
         uint128 liquidityAfter = liquidityBefore + liquidityDelta;
+
+        flipped = (liquidityBefore == 0) != (liquidityAfter == 0);
 
         if (liquidityBefore == 0) {
             tickInfo.initialized = true;
