@@ -1,94 +1,91 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.5.0;
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.14;
 
-/// @title BitMath
-/// @dev This library provides functionality for computing bit properties of an unsigned integer
-library BitMath {
-    /// @notice Returns the index of the most significant bit of the number,
-    ///     where the least significant bit is at index 0 and the most significant bit is at index 255
-    /// @dev The function satisfies the property:
-    ///     x >= 2**mostSignificantBit(x) and x < 2**(mostSignificantBit(x)+1)
-    /// @param x the value for which to compute the most significant bit, must be greater than 0
-    /// @return r the index of the most significant bit
-    function mostSignificantBit(uint256 x) internal pure returns (uint8 r) {
-        require(x > 0);
+import "./FixedPoint96.sol";
+import "../../lib/prb-math/PRBMath.sol";
 
-        if (x >= 0x100000000000000000000000000000000) {
-            x >>= 128;
-            r += 128;
-        }
-        if (x >= 0x10000000000000000) {
-            x >>= 64;
-            r += 64;
-        }
-        if (x >= 0x100000000) {
-            x >>= 32;
-            r += 32;
-        }
-        if (x >= 0x10000) {
-            x >>= 16;
-            r += 16;
-        }
-        if (x >= 0x100) {
-            x >>= 8;
-            r += 8;
-        }
-        if (x >= 0x10) {
-            x >>= 4;
-            r += 4;
-        }
-        if (x >= 0x4) {
-            x >>= 2;
-            r += 2;
-        }
-        if (x >= 0x2) r += 1;
+library Math {
+    function calcAmount0Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount0)
+    {
+        if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+
+        require(sqrtPriceAX96 > 0);
+
+        amount0 = divRoundingUp(
+            mulDivRoundingUp(
+                (uint256(liquidity) << FixedPoint96.RESOLUTION), (sqrtPriceBX96 - sqrtPriceAX96), sqrtPriceBX96
+            ),
+            sqrtPriceAX96
+        );
     }
 
-    /// @notice Returns the index of the least significant bit of the number,
-    ///     where the least significant bit is at index 0 and the most significant bit is at index 255
-    /// @dev The function satisfies the property:
-    ///     (x & 2**leastSignificantBit(x)) != 0 and (x & (2**(leastSignificantBit(x)) - 1)) == 0)
-    /// @param x the value for which to compute the least significant bit, must be greater than 0
-    /// @return r the index of the least significant bit
-    function leastSignificantBit(uint256 x) internal pure returns (uint8 r) {
-        require(x > 0);
+    /// @notice Calculates amount1 delta between two prices
+    /// TODO: round down when removing liquidity
+    function calcAmount1Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount1)
+    {
+        if (sqrtPriceAX96 > sqrtPriceBX96) {
+            (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+        }
 
-        r = 255;
-        if (x & type(uint128).max > 0) {
-            r -= 128;
-        } else {
-            x >>= 128;
+        amount1 = mulDivRoundingUp(liquidity, (sqrtPriceBX96 - sqrtPriceAX96), FixedPoint96.Q96);
+    }
+
+    function getNextSqrtPriceFromInput(uint160 sqrtPriceX96, uint128 liquidity, uint256 amountIn, bool zeroForOne)
+        internal
+        pure
+        returns (uint160 sqrtPriceNextX96)
+    {
+        sqrtPriceNextX96 = zeroForOne
+            ? getNextSqrtPriceFromAmount0RoundingUp(sqrtPriceX96, liquidity, amountIn)
+            : getNextSqrtPriceFromAmount1RoundingDown(sqrtPriceX96, liquidity, amountIn);
+    }
+
+    // corresponds to the delta x formula at: https://uniswapv3book.com/milestone_2/output-amount-calculation.html
+    function getNextSqrtPriceFromAmount0RoundingUp(uint160 sqrtPriceX96, uint128 liquidity, uint256 amountIn)
+        internal
+        pure
+        returns (uint160)
+    {
+        uint256 numerator = uint256(liquidity) << FixedPoint96.RESOLUTION;
+        uint256 product = amountIn * sqrtPriceX96;
+
+        // If product doesn't overflow, use the precise formula.
+        if (product / amountIn == sqrtPriceX96) {
+            uint256 denominator = numerator + product;
+            if (denominator >= numerator) {
+                return uint160(mulDivRoundingUp(numerator, sqrtPriceX96, denominator));
+            }
         }
-        if (x & type(uint64).max > 0) {
-            r -= 64;
-        } else {
-            x >>= 64;
+
+        // If product overflows, use a less precise formula.
+        return uint160(divRoundingUp(numerator, (numerator / sqrtPriceX96) + amountIn));
+    }
+
+    function getNextSqrtPriceFromAmount1RoundingDown(uint160 sqrtPriceX96, uint128 liquidity, uint256 amountIn)
+        internal
+        pure
+        returns (uint160)
+    {
+        return sqrtPriceX96 + uint160((amountIn << FixedPoint96.RESOLUTION) / liquidity);
+    }
+
+    function mulDivRoundingUp(uint256 a, uint256 b, uint256 denominator) internal pure returns (uint256 result) {
+        result = PRBMath.mulDiv(a, b, denominator);
+        if (mulmod(a, b, denominator) > 0) {
+            require(result < type(uint256).max);
+            result++;
         }
-        if (x & type(uint32).max > 0) {
-            r -= 32;
-        } else {
-            x >>= 32;
+    }
+
+    function divRoundingUp(uint256 numerator, uint256 denominator) internal pure returns (uint256 result) {
+        assembly {
+            result := add(div(numerator, denominator), gt(mod(numerator, denominator), 0))
         }
-        if (x & type(uint16).max > 0) {
-            r -= 16;
-        } else {
-            x >>= 16;
-        }
-        if (x & type(uint8).max > 0) {
-            r -= 8;
-        } else {
-            x >>= 8;
-        }
-        if (x & 0xf > 0) {
-            r -= 4;
-        } else {
-            x >>= 4;
-        }
-        if (x & 0x3 > 0) {
-            r -= 2;
-        } else {
-            x >>= 2;
-        }
-        if (x & 0x1 > 0) r -= 1;
     }
 }

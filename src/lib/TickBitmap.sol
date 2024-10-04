@@ -39,7 +39,7 @@ library TickBitmap {
         mapping(int16 => uint256) storage self,
         int24 tick,
         int24 tickSpacing,
-        bool lte
+        bool lte // if true, search for the next initialized tick to the left (less than or equal to the starting tick); if false, search to the right (greater than the starting tick)
     ) internal view returns (int24 next, bool initialized) {
         int24 compressed = tick / tickSpacing;
         if (tick < 0 && tick % tickSpacing != 0) compressed--; // round towards negative infinity
