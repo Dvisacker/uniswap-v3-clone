@@ -2,7 +2,7 @@
 pragma solidity ^0.8.14;
 
 import "./FixedPoint96.sol";
-import "../../lib/prb-math/PRBMath.sol";
+import {PRBMath} from "../../lib/prb-math/PRBMath.sol";
 
 library Math {
     function calcAmount0Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity)
