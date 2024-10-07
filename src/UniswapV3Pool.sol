@@ -1,4 +1,4 @@
-pragma solidity ^0.8.14;
+pragma solidity ^0.8.19;
 
 import {Tick} from "./lib/Tick.sol";
 import {Position} from "./lib/Position.sol";
